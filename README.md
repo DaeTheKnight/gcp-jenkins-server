@@ -66,7 +66,7 @@ Key steps include:
 - `sudo apt-get update && sudo apt-get install jenkins`
 - Check service: `sudo systemctl status jenkins`
 - Browse to `http://<VM_EXTERNAL_IP>:8080` and unlock Jenkins using the initial admin password  
-  (e.g., `/var/lib/jenkins/secrets/initialAdminPassword`) fileciteturn0file0
+  (e.g., `/var/lib/jenkins/secrets/initialAdminPassword`) 
 
 ### 3) Customize Jenkins
 
@@ -82,7 +82,7 @@ Once unlocked, choose “Install suggested plugins” or pick the plugins you ne
 - Add Docker’s apt repo and GPG key
 - Install Docker Engine and verify the service is running
 - (Optional) Add your user to the `docker` group  
-Full, step‑by‑step commands are documented here. fileciteturn0file2
+Full, step‑by‑step commands are documented here. 
 
 ### 2) Run Jenkins via Docker
 
@@ -96,7 +96,7 @@ docker run -d   -p 8080:8080 -p 50000:50000   -v /root/jenkins_home:/var/jenkins
 - `-p` exposes UI (8080) and inbound agents (50000)
 - `-v` mounts host storage into the container for Jenkins config and access to Docker
 - `--name` sets a human‑friendly container name  
-Find the initial admin password at `/root/jenkins_home/secrets/initialAdminPassword`, then open `http://<VM_EXTERNAL_IP>:8080` to finish setup. fileciteturn0file2
+Find the initial admin password at `/root/jenkins_home/secrets/initialAdminPassword`, then open `http://<VM_EXTERNAL_IP>:8080` to finish setup. 
 
 ### 3) (Optional) Jenkins + Docker Cloud/Agent
 
@@ -107,7 +107,7 @@ If you’ll launch ephemeral Docker agents from Jenkins:
 - **Manage Jenkins → Clouds → New Cloud (Docker)**  
   - Docker Host URL: `unix:///var/run/docker.sock`  
   - Add a Docker agent template, choose image (e.g., `jenkins/jenkins:lts`), and connect as `root`  
-Then label the template and restrict jobs to that label in each job’s **Configure** page. fileciteturn0file2
+Then label the template and restrict jobs to that label in each job’s **Configure** page. 
 
 ---
 
@@ -136,23 +136,23 @@ gcloud compute instances set-service-account $JENKINS_VM   --zone=$ZONE   --serv
 gcloud compute instances start $JENKINS_VM --zone=$ZONE
 ```
 
-Use `gcloud auth list` to verify. fileciteturn0file1
+Use `gcloud auth list` to verify. 
 
 ---
 
 ## Common Troubleshooting
 
 - **“Unable to locate package openjdk-11-jdk”**  
-  Run `sudo apt-get update` first, or install the OpenJDK 17 package as shown in the Terraform‑only notes. fileciteturn0file0
+  Run `sudo apt-get update` first, or install the OpenJDK 17 package as shown in the Terraform‑only notes. 
 
 - **Can’t reach Jenkins UI**  
   Ensure firewall rules allow TCP 8080 from your IP. Confirm VM external IP is correct and the service/container is running.
 
 - **Docker not running**  
-  Check `sudo systemctl status docker`, start it if needed, and verify with `docker run hello-world`. fileciteturn0file2
+  Check `sudo systemctl status docker`, start it if needed, and verify with `docker run hello-world`. 
 
 - **Plugins not taking effect (Docker path)**  
-  Restart the container: `docker restart jenkins-ubuntu-1`. fileciteturn0file2
+  Restart the container: `docker restart jenkins-ubuntu-1`. 
 
 - **Terraform variables not picked up**  
   Ensure `terraform.tfvars` is in the working directory or pass `-var-file`. Confirm variable names match those in `6-variables.tf`.
