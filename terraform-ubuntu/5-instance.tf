@@ -1,12 +1,12 @@
 data "google_compute_zones" "iowa" {
-  region = "us-central1"
+  region = var.region
 }
 
-resource "google_compute_instance" "instance-1-iowa-1" {
+resource "google_compute_instance" "jenkins-vm-1" {
   depends_on   = [google_compute_network.vpc]
-  name         = "instance-1-iowa-1"
+  name         = "jenkins-vm-1"
   machine_type = "e2-medium"
-  zone         = data.google_compute_zones.iowa.names[0]
+  zone         = var.zone
 
   tags = ["ubuntu-server-1"]
 
