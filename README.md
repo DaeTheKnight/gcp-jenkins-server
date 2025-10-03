@@ -1,186 +1,181 @@
-# Jenkins on GCP (Ubuntu) — Terraform + Step‑by‑Step Install
+# Jenkins on GCP — Terraform‑Only or Docker Path
 
-This README walks you from **provisioning an Ubuntu VM on Google Cloud with Terraform** to **installing Jenkins** up to the “Customize Jenkins” screen where you pick your settings. It assumes you already have a GCP project and a Service Account JSON that Terraform can use.
+![Screenshot](finished.png)
+
+This repository lets you stand up a Jenkins environment on Google Cloud Platform in **two different ways**:
+
+1) **Terraform‑only**: Provision a VM/network with Terraform and install Jenkins directly on the VM.  
+2) **Docker**: Install Docker on the VM and run Jenkins as a container.
+
+Pick the path that fits your workflow and comfort level. Both are documented below.
 
 ---
-
-## Architecture Overview
-
-- **Terraform** provisions:
-  - VPC, subnet(s), and firewall rules (SSH, HTTP, Jenkins on 8080)
-  - An Ubuntu VM for Jenkins (optionally with a startup script)
-  - (Optional) Remote state in a GCS bucket
-- **Jenkins** runs on the VM and is reachable via the instance’s **external IP:8080**.
-
-> Tip: For production, consider a static external IP, a Managed Instance Group + Instance Template, and HTTPS behind a load balancer.
-
-
-## Repository Layout (example)
-
-```
-.
-├── 0-authentication.tf     # Google provider & auth (uses your SA JSON)
-├── 1-backend.tf            # Terraform backend (GCS state)
-├── 2-vpc.tf                # VPC
-├── 3-subnets.tf            # Subnets
-├── 4-firewall.tf           # Firewall rules (22, 80/443, 8080)
-├── 5-instance.tf           # Compute instance (Ubuntu) + (optional) startup script
-├── 6-variables.tf          # Variables
-├── startup.sh              # (optional) extra bootstrapping
-└── terraform.tfvars        # or *.auto.tfvars for environment values
-```
-
-If you use environment‑specific tfvars (e.g., `dev.tfvars` / `prod.tfvars`), remember Terraform does **not** auto‑load them unless they end in `.auto.tfvars`. Otherwise pass `-var-file=...` when planning/applying.
-
 
 ## Prerequisites
 
-- **gcloud** installed (optional but helpful)
-- **Terraform** v1.4+ (recommend v1.9+)
-- **Service Account JSON** with permissions for the resources you create (compute, network, storage, etc.).
-- Required GCP APIs enabled (e.g., `compute.googleapis.com`, `iam.googleapis.com`).
+- A GCP project with billing enabled  
+- `gcloud` CLI authenticated to that project  
+- Terraform installed (v1.5+ recommended)  
+- A Google Cloud service account with appropriate permissions (see **Attach a Service Account to the VM** below) fileciteturn0file1
 
+---
 
-## 1) Initialize & Plan Infrastructure
+## Repo Layout (Terraform)
 
-From the Terraform working directory:
+These files define the core infrastructure:
+
+- `0-authentication.tf` — provider auth blocks and project configuration
+- `1-backend.tf` — remote state backend (e.g., GCS) for Terraform state
+- `2-vpc.tf` — VPC creation
+- `3-subnets.tf` — Subnet(s) by region
+- `4-firewall.tf` — Firewall rules (e.g., allow SSH/HTTP/HTTPS/Jenkins)
+- `5-instance.tf` — Compute Engine VM, disks, service account scopes, metadata
+- `6-variables.tf` — Input variables for the stack
+
+Create a `terraform.tfvars` (or use `-var-file`) with your values, e.g.:
+
+```hcl
+project = "my-first-project"
+region  = "us-central1"
+zone    = "us-central1-b"
+vpc     = "jenkins-cloud"
+```
+
+> If Terraform asks for variables you already put in `terraform.tfvars`, ensure the file is in the same directory you run commands from and is named exactly `terraform.tfvars`. You can also pass `-var-file=terraform.tfvars` explicitly.
+
+---
+
+## Path A — Terraform‑Only (Install Jenkins on the VM)
+
+### 1) Initialize and apply Terraform
 
 ```bash
 terraform init
-# If you use a non-default tfvars file:
-terraform plan -var-file="terraform.tfvars"    # or dev.tfvars / prod.tfvars
-# Otherwise:
 terraform plan
-```
-
-Review the plan output to confirm:
-- A VPC + subnets will be created
-- Firewall rules allow:
-  - **22/tcp** (SSH) from your IP
-  - **80, 443/tcp** (web traffic, optional)
-  - **8080/tcp** to reach Jenkins (you can restrict to your IP)
-- An **Ubuntu** VM instance will be created
-
-
-## 2) Apply Infrastructure
-
-```bash
-# With explicit vars:
-terraform apply -var-file="terraform.tfvars"
-
-# Or without if using terraform.tfvars / *.auto.tfvars:
 terraform apply
 ```
 
-When the apply completes, note the **external IP** of your VM. If you don’t output it in Terraform, you can find it in the GCP Console → Compute Engine → VM instances.
+Wait for the VM to finish provisioning, then SSH to it (via Cloud Console or `gcloud compute ssh`).
 
+### 2) Install Java and Jenkins on the VM
 
-## 3) (Optional) SSH Into the VM
+Follow the “Terraform‑only” Jenkins setup notes (Java, apt repo, Jenkins install, and first‑time unlock).  
+Key steps include:
 
-```bash
-gcloud compute ssh YOUR_INSTANCE_NAME --zone YOUR_ZONE --project YOUR_PROJECT
-# or use your SSH key directly
-```
+- Install Java (OpenJDK 17) and add the Jenkins apt repo
+- `sudo apt-get update && sudo apt-get install jenkins`
+- Check service: `sudo systemctl status jenkins`
+- Browse to `http://<VM_EXTERNAL_IP>:8080` and unlock Jenkins using the initial admin password  
+  (e.g., `/var/lib/jenkins/secrets/initialAdminPassword`) fileciteturn0file0
 
-Update packages first:
-```bash
-sudo apt-get update
-```
+### 3) Customize Jenkins
 
+Once unlocked, choose “Install suggested plugins” or pick the plugins you need.
 
-## 4) Install Java & Jenkins on Ubuntu
+---
 
-Use the current Jenkins Debian repo (installs OpenJDK 17 runtime and Jenkins):
+## Path B — Docker (Run Jenkins in a Container)
 
-```bash
-# 1) Add Jenkins key to keyrings
-sudo wget -O /etc/apt/keyrings/jenkins-keyring.asc   https://pkg.jenkins.io/debian/jenkins.io-2023.key
+### 1) Install Docker Engine
 
-# 2) Add Jenkins apt repository
-echo "deb [signed-by=/etc/apt/keyrings/jenkins-keyring.asc] https://pkg.jenkins.io/debian binary/" |   sudo tee /etc/apt/sources.list.d/jenkins.list > /dev/null
+- Remove conflicting packages if present
+- Add Docker’s apt repo and GPG key
+- Install Docker Engine and verify the service is running
+- (Optional) Add your user to the `docker` group  
+Full, step‑by‑step commands are documented here. fileciteturn0file2
 
-# 3) Update and install Java & Jenkins
-sudo apt-get update
-sudo apt-get install -y fontconfig openjdk-17-jre
-sudo apt-get install -y jenkins
-```
+### 2) Run Jenkins via Docker
 
-Check the service:
-```bash
-sudo systemctl status jenkins
-# Press 'q' to exit the pager
-```
-
-If `openjdk-11-jdk` isn’t found on newer Ubuntu/Debian versions, prefer OpenJDK 17 as shown above.
-
-
-## 5) Open Port 8080 (Firewall)
-
-If your Terraform didn’t already open 8080, add a firewall rule (Terraform recommended). From the console (temporary):
+Use a persistent volume for Jenkins home and start the container:
 
 ```bash
-# Example gcloud (replace NETWORK & TARGET TAG)
-gcloud compute firewall-rules create allow-jenkins-8080   --network=YOUR_NETWORK   --allow=tcp:8080   --target-tags=jenkins   --source-ranges=YOUR_PUBLIC_IP/32
+docker run -d   -p 8080:8080 -p 50000:50000   -v /root/jenkins_home:/var/jenkins_home   -u root   --name jenkins-ubuntu-1   --privileged=true   -v /var/run/docker.sock:/var/run/docker.sock   jenkins/jenkins:lts
 ```
 
-Ensure the VM has a matching **network tag** (e.g., `jenkins`).
+- `-d` runs it detached
+- `-p` exposes UI (8080) and inbound agents (50000)
+- `-v` mounts host storage into the container for Jenkins config and access to Docker
+- `--name` sets a human‑friendly container name  
+Find the initial admin password at `/root/jenkins_home/secrets/initialAdminPassword`, then open `http://<VM_EXTERNAL_IP>:8080` to finish setup. fileciteturn0file2
 
+### 3) (Optional) Jenkins + Docker Cloud/Agent
 
-## 6) Access Jenkins
+If you’ll launch ephemeral Docker agents from Jenkins:
 
-On your local machine, open your browser to:
-```
-http://EXTERNAL_IP:8080
-```
+- **Manage Jenkins → Plugins**: install **Docker** plugin  
+- Restart the Jenkins container: `docker restart jenkins-ubuntu-1`  
+- **Manage Jenkins → Clouds → New Cloud (Docker)**  
+  - Docker Host URL: `unix:///var/run/docker.sock`  
+  - Add a Docker agent template, choose image (e.g., `jenkins/jenkins:lts`), and connect as `root`  
+Then label the template and restrict jobs to that label in each job’s **Configure** page. fileciteturn0file2
 
-You should see the **Unlock Jenkins** page with the path to the initial admin password.
+---
 
+## Attach a Service Account to the VM (Recommended)
 
-## 7) Unlock Jenkins
+To let Jenkins (on the VM) access GCP resources (e.g., Terraform/`gcloud` on the VM), create and attach a service account:
 
-On the VM, print the password and copy it:
-
+1) **Create the service account**
 ```bash
-sudo cat /var/lib/jenkins/secrets/initialAdminPassword
+gcloud iam service-accounts create jenkins-sa   --display-name="Jenkins Terraform Service Account"
 ```
 
-Paste the password into the Jenkins web form to unlock.
-
-
-## 8) Customize Jenkins (Pick Your Settings)
-
-Jenkins will ask you to **Install suggested plugins** or **Select plugins to install**. Either is fine to proceed—**suggested** is quickest for a first run. Then you’ll be prompted to:
-
-1. **Create First Admin User** — set username & password  
-2. **Instance Configuration** — confirm the Jenkins URL (use `http://EXTERNAL_IP:8080` unless you’ve set DNS/HTTPS)
-
-
-## 9) (Optional) Hardening & Next Steps
-
-- Restrict firewall rules (limit 8080 to your IP); or front Jenkins with an HTTPS reverse proxy / load balancer.
-- Switch to a **static external IP** (reserved address).
-- Configure **backups** for the Jenkins home (`/var/lib/jenkins/`).
-- Add a **Pipeline** that runs Terraform (`init/plan/apply`) for your web server infra.
-- Use **service account** credentials stored securely (e.g., Jenkins Credentials + environment binding).
-
-
-## Troubleshooting
-
-- **E: Unable to locate package** — Run `sudo apt-get update` first, verify your repo entries and keyrings are present.
-- **Jenkins not reachable** — Confirm VM external IP, firewall rules for 8080, and that the Jenkins service is running: `sudo systemctl status jenkins`.
-- **Permission errors in Terraform** — Ensure the service account has the required IAM roles (compute, network, storage, etc.).
-- **Startup script didn’t run** — Check serial console logs and `journalctl -u google-startup-scripts -xe` (if using GCE metadata startup script).
-
-
-## Destroy (Clean Up)
-
-When you’re done testing:
+2) **Grant roles**
 ```bash
-terraform destroy -var-file="terraform.tfvars"
-# or simply:
+gcloud projects add-iam-policy-binding $PROJECT_ID   --member="serviceAccount:jenkins-sa@${PROJECT_ID}.iam.gserviceaccount.com"   --role="roles/compute.networkAdmin"
+
+gcloud projects add-iam-policy-binding $PROJECT_ID   --member="serviceAccount:jenkins-sa@${PROJECT_ID}.iam.gserviceaccount.com"   --role="roles/compute.instanceAdmin.v1"
+```
+
+3) **Attach to the VM**
+```bash
+gcloud compute instances stop $JENKINS_VM --zone=$ZONE
+
+gcloud compute instances set-service-account $JENKINS_VM   --zone=$ZONE   --service-account=jenkins-sa@${PROJECT_ID}.iam.gserviceaccount.com   --scopes=https://www.googleapis.com/auth/cloud-platform
+
+gcloud compute instances start $JENKINS_VM --zone=$ZONE
+```
+
+Use `gcloud auth list` to verify. fileciteturn0file1
+
+---
+
+## Common Troubleshooting
+
+- **“Unable to locate package openjdk-11-jdk”**  
+  Run `sudo apt-get update` first, or install the OpenJDK 17 package as shown in the Terraform‑only notes. fileciteturn0file0
+
+- **Can’t reach Jenkins UI**  
+  Ensure firewall rules allow TCP 8080 from your IP. Confirm VM external IP is correct and the service/container is running.
+
+- **Docker not running**  
+  Check `sudo systemctl status docker`, start it if needed, and verify with `docker run hello-world`. fileciteturn0file2
+
+- **Plugins not taking effect (Docker path)**  
+  Restart the container: `docker restart jenkins-ubuntu-1`. fileciteturn0file2
+
+- **Terraform variables not picked up**  
+  Ensure `terraform.tfvars` is in the working directory or pass `-var-file`. Confirm variable names match those in `6-variables.tf`.
+
+---
+
+## Clean Up
+
+When you’re done:
+```bash
+# Terraform
 terraform destroy
+
+# Docker (if used)
+docker rm -f jenkins-ubuntu-1
 ```
 
 ---
 
-**You’re ready to build pipelines!** Start by creating a simple Declarative Pipeline that does `terraform fmt/validate`, then `plan`, then (optionally) a manual approval before `apply`. For production, separate state or workspaces per environment.
+## Notes
+
+- The Terraform path gives you a classic VM install of Jenkins managed by `systemd`.  
+- The Docker path provides easy upgrades/rollbacks and isolation of Jenkins from the host OS.  
+- You can mix approaches: use Terraform to create the VM/network and then choose to install Jenkins either directly (Terraform‑only steps) or via Docker.
+
+Happy building!  
