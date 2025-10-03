@@ -16,7 +16,7 @@ Pick the path that fits your workflow and comfort level. Both are documented bel
 - A GCP project with billing enabled  
 - `gcloud` CLI authenticated to that project  
 - Terraform installed (v1.5+ recommended)  
-- A Google Cloud service account with appropriate permissions (see **Attach a Service Account to the VM** below) fileciteturn0file1
+- A Google Cloud service account with appropriate permissions (see **Attach a Service Account to the VM** below) 
 
 ---
 
